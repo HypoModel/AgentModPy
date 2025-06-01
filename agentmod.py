@@ -26,7 +26,7 @@ class AgentMod(Mod):
 
         self.protobox = AgentProtoBox(self, "proto", "Input Protocols", wx.Point(0, 0), wx.Size(320, 500))
         self.gridbox = GridBox(self, "Data Grid", wx.Point(0, 0), wx.Size(320, 500), 100, 20)
-        self.agentbox = AgentBox(self, "agent", "Agent", wx.Point(0, 0), wx.Size(320, 500))
+        self.agentbox = AgentBox(self, "agent", "AgentMod", wx.Point(0, 0), wx.Size(320, 500))
 
         # link mod owned boxes
         mainwin.gridbox = self.gridbox
