@@ -3,3 +3,4 @@
 *.pyc
 *.pyc
 *.pyc
+__pycache__/agentmod.cpython-313.pyc
