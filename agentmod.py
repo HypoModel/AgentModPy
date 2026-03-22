@@ -13,8 +13,8 @@ from HypoModPy.hypogrid import *
 
 
 class AgentMod(Mod):
-    def __init__(self, mainwin, tag):
-        Mod.__init__(self, mainwin, tag)
+    def __init__(self, mainwin, tag, label="", type=""):
+        Mod.__init__(self, mainwin, tag, label, type)
 
         if mainwin.modpath != "": self.path = mainwin.modpath + "/Agent"
         else: self.path = "Agent"
