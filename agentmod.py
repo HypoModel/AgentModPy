@@ -1,6 +1,7 @@
 
 import os
 import random
+import math
 from datetime import datetime
 
 import wx
@@ -14,7 +15,78 @@ from HypoModPy.hypomods import (
 from HypoModPy.hypoparams import ParamBox
 from HypoModPy.hypodat import PlotDat, datarray, pdata
 from HypoModPy.hypogrid import GridBox
+from HypoModPy.hypomain import DiagWrite
 
+from agentpanels import AgentBox, AgentProtoBox
+
+
+
+class AgentDat():
+    def __init__(self, storesize):
+        self.storesize = storesize
+
+        # initialise arrays for recording model variables (or any model values)
+        self.energy = pdata(self.storesize + 1)
+        self.appetite = pdata(self.storesize + 1)
+        self.glyco = pdata(self.storesize + 1)
+        self.insulin = pdata(self.storesize + 1)
+        self.chamber = pdata(self.storesize + 1)
+        self.gut = pdata(self.storesize + 1)
+        self.feed = pdata(self.storesize + 1)
+        self.food = pdata(self.storesize + 1)
+        self.reward = pdata(self.storesize + 1)
+        self.reward_def = pdata(self.storesize + 1)
+        self.fullness = pdata(self.storesize + 1)
+        self.ghrelin = pdata(self.storesize + 1)
+        self.energyLong = pdata(self.storesize + 1)
+        self.rewardLong = pdata(self.storesize + 1)
+        self.reward_oral = pdata(self.storesize + 1)
+        self.reward_gut = pdata(self.storesize + 1)
+        self.reward_new = pdata(self.storesize + 1)
+        self.food1 = pdata(self.storesize + 1)
+        self.food2 = pdata(self.storesize + 1)
+    
+
+
+class FoodDat():
+    def __init__(self, storesize):
+        self.storesize = storesize
+
+        # parameters
+        self.amount = 0
+        self.step = 0
+        self.interval = 0
+        self.density = 0
+        self.reward = 0
+        self.taste = 0
+        self.cost = 0
+        self.basereward = 0
+        self.desens = 0
+        self.gut = 0
+        self.start = 0
+        self.stop = 0
+
+        # recording arrays
+        self.consumed = pdata(self.storesize + 1)
+
+    def GetReward(self):
+        return self.reward
+
+
+class FoodChoice():
+    def __init__(self):
+        self.reward = 0
+        self.type = 0
+        self.prob = 0
+
+
+class FoodGut():
+    def __init__(self):
+        self.reward = 0
+        self.type = 0
+        self.amount = 0
+        self.density = 0
+        self.proportion = 0
 
 
 class AgentMod(Mod):
@@ -46,12 +118,13 @@ class AgentMod(Mod):
         self.ModLoad()
         print("Agent Model OK")
 
-        self.agentdata = AgentDat()
+        self.agentdata = AgentDat(100000)
+        self.foodtype = [FoodDat(100000) for _ in range(10)]
+
+
         self.PlotData()
         self.graphload = True
 
-        #for i in range(1, 100):
-        #    self.agentdata.water[i] = 100
 
 
     ## PlotData() defines all the available plots, each linked to a data array in agentdata
@@ -61,30 +134,45 @@ class AgentMod(Mod):
         #
         # AddPlot(PlotDat(data array, xfrom, xto, yfrom, yto, label string, plot type, bin size, colour), tag string)
         # ----------------------------------------------------------------------------------
-        self.plotbase.AddPlot(PlotDat(self.agentdata.water, 0, 2000, 0, 5000, "water", "line", 1, "blue"), "water")
-        self.plotbase.AddPlot(PlotDat(self.agentdata.salt, 0, 2000, 0, 100, "salt", "line", 1, "red"), "salt")
-        self.plotbase.AddPlot(PlotDat(self.agentdata.osmo, 0, 2000, 0, 100, "osmo", "line", 1, "green"), "osmo")
-        self.plotbase.AddPlot(PlotDat(self.agentdata.vaso, 0, 2000, 0, 100, "vaso", "line", 1, "purple"), "vaso")
+        scalefactor = 1 / 60
+
+        self.plotbase.AddPlot(PlotDat(self.agentdata.energy, 0, 2000, 0, 2000, "energy (hours)", "line", scalefactor, "blue"), "energy")
+        #self.plotbase.AddPlot(PlotDat(self.agentdata.appetite, 0, 2000, 0, 2000, "appetite", "line", 1, "red"), "appetite")
+        #self.plotbase.AddPlot(PlotDat(self.agentdata.glyco, 0, 2000, 0, 2000, "glyco", "line", 1, "red"), "glyco")
+        #self.plotbase.AddPlot(PlotDat(self.agentdata.insulin, 0, 2000, 0, 2000, "insulin", "line", 1, "blue"), "insulin")
+        #self.plotbase.AddPlot(PlotDat(self.agentdata.chamber, 0, 2000, 0, 2000, "chamber", "line", 1, "green"), "chamber")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.gut, 0, 2000, 0, 2000, "gut", "line", scalefactor, "green"), "gut")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.feed, 0, 2000, 0, 2000, "feed", "line", scalefactor, "red"), "feed")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.food, 0, 2000, 0, 100, "food", "line", scalefactor, "blue"), "food")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.reward, 0, 2000, 0, 100, "reward", "line", scalefactor, "green"), "reward")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.reward_def, 0, 2000, 0, 100, "reward def", "line", scalefactor, "red"), "reward_def")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.fullness, 0, 2000, 0, 100, "fullness", "line", scalefactor, "red"), "fullness")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.ghrelin, 0, 2000, 0, 100, "ghrelin", "line", scalefactor, "lightred"), "ghrelin")
+
+        self.plotbase.AddPlot(PlotDat(self.agentdata.energyLong, 0, 2000, 0, 2000, "energy (days)", "line", 60, "blue", 1440), "energyLong")
+        self.plotbase.GetPlot("energyLong").synchx = False
+
+        self.plotbase.AddPlot(PlotDat(self.agentdata.rewardLong, 0, 2000, 0, 2000, "reward (days)", "line", 60, "green", 1440), "rewardLong")
+        self.plotbase.GetPlot("rewardLong").synchx = False
+
+        self.plotbase.AddPlot(PlotDat(self.agentdata.reward_oral, 0, 2000, 0, 100, "reward oral", "line", scalefactor, "green"), "reward_oral")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.reward_gut, 0, 2000, 0, 100, "reward gut", "line", scalefactor, "blue"), "reward_gut")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.reward_new, 0, 2000, 0, 100, "reward new", "line", scalefactor, "purple"), "reward_new")
+
+        self.plotbase.AddPlot(PlotDat(self.agentdata.food1, 0, 2000, 0, 100, "food1", "line", scalefactor, "green"), "food1")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.food2, 0, 2000, 0, 100, "food2", "line", scalefactor, "red"), "food2")
+        self.plotbase.AddPlot(PlotDat(self.foodtype[0].consumed, 0, 2000, 0, 100, "food1 consumed", "line", 1, "green"), "food1consumed")
+        self.plotbase.AddPlot(PlotDat(self.foodtype[1].consumed, 0, 2000, 0, 100, "food2 consumed", "line", 1, "red"), "food2consumed")
 
 
     def DefaultPlots(self):
-        if len(self.mainwin.panelset) > 0: self.mainwin.panelset[0].settag = "water"
-        if len(self.mainwin.panelset) > 1: self.mainwin.panelset[1].settag = "salt"
-        if len(self.mainwin.panelset) > 2: self.mainwin.panelset[2].settag = "osmo"
+        if len(self.mainwin.panelset) > 0: self.mainwin.panelset[0].settag = "energy"
+        if len(self.mainwin.panelset) > 1: self.mainwin.panelset[1].settag = "gut"
+        if len(self.mainwin.panelset) > 2: self.mainwin.panelset[2].settag = "feed"
 
 
     def OnModThreadComplete(self, event):
-        #runmute->Lock();
-        #runflag = 0;
-        #runmute->Unlock();
-
-        # plot store test code
-        # for i in range(1, 100):
-        #     self.agentdata.water[i] = 200
-        #self.agentdata.water.label = "plot test"
-
         self.mainwin.scalebox.GraphUpdateAll()
-        #DiagWrite("Model thread OK\n\n")
 
 
     def OnModThreadProgress(self, event):
@@ -93,256 +181,21 @@ class AgentMod(Mod):
 
     def RunModel(self):
         self.mainwin.SetStatusText("Agent Model Run")
-        modthread = AgentModel(self)
+        params = {
+                "agent": self.agentbox.GetParams(),
+                "proto": self.protobox.GetParams()
+            }
+        modthread = AgentModel(self, params)
         modthread.start()
 
 
 
-class AgentDat():
-    def __init__(self):
-        self.storesize = 10000
-
-        # initialise arrays for recording model variables (or any model values)
-        self.water = datarray(self.storesize + 1)
-        self.salt = pdata(self.storesize + 1)
-        self.osmo = pdata(self.storesize + 1)
-        self.vaso = pdata(self.storesize + 1)
-
-
-
-class AgentBox(ParamBox):
-    def __init__(self, mod, tag, title, position, size):
-        ParamBox.__init__(self, mod, title, position, size, tag, 0, 1)
-
-        self.autorun = True
-
-        # Initialise Menu 
-        self.InitMenu()
-
-        # Model Flags
-        #ID_randomflag = wx.NewIdRef()   # request a new control ID
-        self.AddFlag("randomflag", "Fixed Random Seed", 0)         # menu accessed flags for switching model code
-
-        paneltype = "Default"
-
-        if paneltype == "Default": self.DefaultPanel()
-        if paneltype == "Bristol": self.BristolPanel()
-        if paneltype == "Work": self.WorkPanel()
-
-        # Parameter controls
-        #
-        # AddCon(tag string, display string, initial value, click increment, decimal places)
-        # ----------------------------------------------------------------------------------
-        #self.paramset.AddCon("runtime", "Run Time", 2000, 1, 0)
-        #self.paramset.AddCon("hstep", "h Step", 1, 0.1, 1)
-        #self.paramset.AddCon("waterloss", "Water Loss", 0, 0.00001, 5)
-
-        self.ParamLayout(2)   # layout parameter controls in two columns
-
-        # ----------------------------------------------------------------------------------
-
-        runbox = self.RunBox()
-        paramfilebox = self.StoreBoxSync()
-
-        ID_Proto = wx.NewIdRef()
-        self.AddPanelButton(ID_Proto, "Proto", self.mod.protobox)
-        ID_Grid = wx.NewIdRef()
-        self.AddPanelButton(ID_Grid, "Grid", self.mod.gridbox)
-
-        self.mainbox.AddSpacer(5)
-        self.mainbox.Add(self.pconbox, 1, wx.ALIGN_CENTRE_HORIZONTAL|wx.ALIGN_CENTRE_VERTICAL|wx.ALL, 0)
-        self.mainbox.AddStretchSpacer(5)
-        self.mainbox.Add(runbox, 0, wx.ALIGN_CENTRE_HORIZONTAL|wx.ALIGN_CENTRE_VERTICAL|wx.ALL, 0)
-        self.mainbox.AddSpacer(5)
-        self.mainbox.Add(paramfilebox, 0, wx.ALIGN_CENTRE_HORIZONTAL|wx.ALIGN_CENTRE_VERTICAL|wx.ALL, 0)	
-        #self.mainbox.AddStretchSpacer()
-        self.mainbox.Add(self.buttonbox, 0, wx.ALIGN_CENTRE_HORIZONTAL | wx.ALIGN_CENTRE_VERTICAL | wx.ALL, 0)
-        self.mainbox.AddSpacer(5)
-        #self.mainbox.AddSpacer(2)
-        self.panel.Layout()
-
-
-
-    def DefaultPanel(self):
-
-        self.AddFlag("randfood", "Random Food", 0)
-        self.AddFlag("glycoflag", "Use Glycogen", 0)
-        self.AddFlag("chamberflag", "Use Chamber", 0)
-        self.AddFlag("adlibflag", "Ad Libitum", 0)
-
-
-        # Parameter controls
-        #
-        # AddCon(tag string, display string, initial value, click increment, decimal places)
-        # ----------------------------------------------------------------------------------
-
-        self.paramset.AddCon("runtime", "Run Time", 2000, 1, 0)
-        self.paramset.AddCon("hstep", "h Step", 1, 0.1, 1)
-        self.paramset.AddCon("basecost", "Base Cost", 0, 1, 4)
-        self.paramset.AddCon("feedthresh", "Feed Thresh", 0, 1, 2)
-        self.paramset.AddCon("foodstep", "Feed Step", 0, 1, 2)
-        self.paramset.AddCon("foodfreq", "Feed Freq", 0.01, 0.001, 4)
-        self.paramset.AddCon("gluco_set", "Gluco Set", 1000, 1, 2)
-        self.paramset.AddCon("glyco_rate", "Glyco Rate", 0.1, 0.01, 4)
-        self.paramset.AddCon("glyco_max", "Glyco Max", 10000, 10, 1)
-        self.paramset.AddCon("glyco_init", "Glyco Init", 0, 10, 1)
-        self.paramset.AddCon("glyco_feed", "Glyco Feed", 500, 10, 1)
-        self.paramset.AddCon("absorprate", "Absorp Rate", 0, 10, 2)
-        self.paramset.AddCon("fullthresh", "Full Thresh", 0, 10, 1)
-        self.paramset.AddCon("storecost_rate", "Store Rate", 0, 0.01, 5)
-        self.paramset.AddCon("feedrate", "Feed Rate", 0.01, 0.001, 3)
-        self.paramset.AddCon("energy_init", "Energy Init", 10000, 10, 1)
-        self.paramset.AddCon("energy_max", "Energy Max", 10000, 10, 1)
-        self.paramset.AddCon("gut_max", "Gut Max", 1000, 10, 1)
-        self.paramset.AddCon("rewardbase", "Reward Base", 0.01, 0.001, 3)
-        self.paramset.AddCon("gutfactor", "Gut Factor", 0.01, 0.001, 3)
-        self.paramset.AddCon("fatfactor", "Fat Factor", 0.01, 0.001, 3)
-        self.paramset.AddCon("reward_def_factor", "Reward Def", 0.01, 0.001, 3)
-        self.paramset.AddCon("reward_tau", "Reward Tau", 0.01, 0.001, 5)
-        self.paramset.AddCon("ghrelin_secrate", "Ghrelin Sec", 0, 0.001, 5)
-        self.paramset.AddCon("ghrelin_decay", "Ghrelin Decay", 0, 0.001, 5)
-
-
-    def BristolPanel(self):
-        if self.ostype == "Mac":
-           numwidth = 60
-           labelwidth = 80
-        else:
-            numwidth = 60
-            labelwidth = 70
-
-        self.SetModFlag("randfood", "Random Feed", 0)
-        self.SetModFlag("adlibflag", "Ad Libitum", 0)
-
-        # Parameter controls
-        #
-        # AddCon(tag string, display string, initial value, click increment, decimal places)
-        # ----------------------------------------------------------------------------------
-
-        self.paramset.AddCon("runtime", "Run Time", 2000, 1, 0, labelwidth, numwidth)
-        self.paramset.AddCon("basecost", "basecost", 0, 10, 2, labelwidth, numwidth)
-        self.paramset.AddCon("foodstep", "foodstep", 0, 100, 2, labelwidth, numwidth)
-        self.paramset.AddCon("foodfreq", "foodfreq", 0.01, 0.1, 2, labelwidth, numwidth)
-        self.paramset.AddCon("absorp_rate", "absorprate", 0, 0.1, 2, labelwidth, numwidth)
-        self.paramset.AddCon("storecost_rate", "storecost", 0, 0.0001, 5, labelwidth, numwidth)
-        self.paramset.AddCon("feed_rate", "feedrate", 0.01, 1, 3, labelwidth, numwidth)
-        self.paramset.AddCon("energy_init", "energy_init", 10000, 10, 1, labelwidth, numwidth)
-        self.paramset.AddCon("gut_max", "gut_max", 1000, 10, 1, labelwidth, numwidth)
-        self.paramset.AddCon("reward_base", "Reward Base", 0.01, 0.001, 3, labelwidth, numwidth)
-        self.paramset.AddCon("gut_factor", "gutfactor", 0.01, 0.1, 3, labelwidth, numwidth)
-        self.paramset.AddCon("fat_factor", "fatfactor", 0.01, 0.01, 3, labelwidth, numwidth)
-
-        self.paramset.AddCon("reward_def_factor", "Reward Def", 0.01, 0.001, 3, labelwidth, numwidth)
-        self.paramset.AddCon("reward_tau", "Reward Tau", 0.01, 0.001, 5, labelwidth, numwidth)
-        self.paramset.AddCon("ghrelin_secrate", "Ghrelin Sec", 0, 0.001, 5, labelwidth, numwidth)
-        self.paramset.AddCon("ghrelin_decay", "Ghrelin Decay", 0, 0.001, 5, labelwidth, numwidth)
-        self.paramset.AddCon("feedfreq", "Feed Freq", 0, 0.001, 5, labelwidth, numwidth)
-
-
-    def WorkPanel(self):
-
-        if self.ostype == "Mac":
-            self.paramset.con_numwidth = 60
-            self.paramset.con_labelwidth = 80
-        else:
-            self.paramset.con_numwidth = 60
-            self.paramset.con_labelwidth = 70
-
-
-        self.SetModFlag("randfood", "Random Feed", 0)
-        self.SetModFlag("adlibflag", "Ad Libitum", 0)
-        self.SetModFlag("newrewardflag", "New Reward", 0)
-        self.SetModFlag("multifoodflag", "Multi Food", 0)
-        self.SetModFlag("gutrewardflag", "Gut Reward", 0)
-        self.SetModFlag("rewardbaseflag", "Reward Base", 0)
-
-
-        # Parameter controls
-        #
-        # AddCon(tag string, display string, initial value, click increment, decimal places)
-        # ----------------------------------------------------------------------------------
-
-        self.paramset.AddCon("runtime", "Run Time", 2000, 1, 0)
-        self.paramset.AddCon("basecost", "basecost", 0, 10, 2)
-        self.paramset.AddCon("foodstep", "foodstep", 0, 100, 2)
-        self.paramset.AddCon("foodfreq", "foodfreq", 0.01, 0.1, 2)
-
-        self.paramset.AddCon("food1step", "food1step", 0, 100, 2)
-        self.paramset.AddCon("food1freq", "food1freq", 0.01, 0.1, 2)
-        self.paramset.AddCon("food1taste", "food1taste", 0.01, 0.1, 2)
-        self.paramset.AddCon("food1density", "food1density", 0.01, 0.1, 2)
-        self.paramset.AddCon("food1start", "food1start", 0, 1, 0)
-        self.paramset.AddCon("food1stop", "food1stop", 0, 1, 0)
-
-        self.paramset.AddCon("food2step", "food2step", 0, 100, 2)
-        self.paramset.AddCon("food2freq", "food2freq", 0.01, 0.1, 2)
-        self.paramset.AddCon("food2taste", "food2taste", 0.01, 0.1, 2)
-        self.paramset.AddCon("food2density", "food2density", 0.01, 0.1, 2)
-        self.paramset.AddCon("food2start", "food2start", 0, 1, 0)
-        self.paramset.AddCon("food2stop", "food2stop", 0, 1, 0)
-
-        self.paramset.AddCon("absorp_rate", "absorprate", 0, 0.1, 2)
-        self.paramset.AddCon("storecost_rate", "storecost", 0, 0.0001, 5)
-        self.paramset.AddCon("feed_rate", "feedrate", 0.01, 1, 3)
-        self.paramset.AddCon("energy_init", "energy_init", 10000, 10, 1)
-        self.paramset.AddCon("gut_max", "gut_max", 1000, 10, 1)
-        self.paramset.AddCon("reward_base", "Reward Base", 0.01, 0.001, 3)
-        self.paramset.AddCon("reward_init", "Reward Init", 0.0, 0.001, 3)
-        self.paramset.AddCon("gut_factor", "gutfactor", 0.01, 0.1, 3)
-        self.paramset.AddCon("fat_factor", "fatfactor", 0.01, 0.01, 3)
-
-        self.paramset.AddCon("reward_def_factor", "Reward Def", 0.01, 0.001, 3)
-        self.paramset.AddCon("reward_tau", "Reward Tau", 0.01, 0.001, 6)
-        self.paramset.AddCon("ghrelin_secrate", "Ghrelin Sec", 0, 0.001, 5)
-        self.paramset.AddCon("ghrelin_decay", "Ghrelin Decay", 0, 0.001, 5)
-        self.paramset.AddCon("feedfreq", "Feed Freq", 0, 0.001, 5)
-
-        self.paramset.AddCon("reward_tau_oral", "ROral Tau", 0, 0.001, 6)
-        self.paramset.AddCon("reward_weight_oral", "ROral Weight ", 0, 0.01, 3)
-        self.paramset.AddCon("reward_tau_gut", "RGut Tau", 0, 0.001, 6)
-        self.paramset.AddCon("reward_weight_gut", "RGut Weight ", 0, 0.01, 3)
-
-        self.paramset.AddCon("eatrate", "Eat Rate ", 1, 0.01, 5)
-
-
-
-class AgentProtoBox(ParamBox):
-    def __init__(self, mod, tag, title, position, size):
-        ParamBox.__init__(self, mod, title, position, size, tag, 0, 1)
-
-        self.autorun = True
-
-        # Initialise Menu 
-        #self.InitMenu()
-
-        # Model Flags
-    
-
-        # Parameter controls
-        #
-        # AddCon(tag string, display string, initial value, click increment, decimal places)
-        # ----------------------------------------------------------------------------------
-        self.paramset.AddCon("drinkstart", "Drink Start", 0, 1, 0)
-        self.paramset.AddCon("drinkstop", "Drink Stop", 0, 1, 0)
-        self.paramset.AddCon("drinkrate", "Drink Rate", 10, 1, 0)
-
-        self.ParamLayout(3)   # layout parameter controls in two columns
-
-        # ----------------------------------------------------------------------------------
-
-        self.mainbox.AddSpacer(5)
-        self.mainbox.Add(self.pconbox, 1, wx.ALIGN_CENTRE_HORIZONTAL|wx.ALIGN_CENTRE_VERTICAL|wx.ALL, 0)
-        self.mainbox.AddStretchSpacer(5)
-        self.mainbox.AddSpacer(2)
-        self.panel.Layout()
-
-
-
 class AgentModel(ModThread):
-    def __init__(self, mod):
+    def __init__(self, mod, params):
         ModThread.__init__(self, mod.modbox, mod.mainwin)
 
         self.mod = mod
+        self.params = params
         self.agentbox = mod.agentbox
         self.mainwin = mod.mainwin
         self.scalebox = mod.mainwin.scalebox
@@ -356,71 +209,374 @@ class AgentModel(ModThread):
         if self.randomflag: random.seed(0)
         else: random.seed(datetime.now().microsecond)
 
+        self.Initialise()
         self.Model()
         wx.QueueEvent(self.mod, ModThreadEvent(ModThreadCompleteEvent))
 
 
+    def Initialise(self):
+        agentparams = self.params["agent"]
+        foodtype = self.mod.foodtype
+
+        foodtype[0].step = agentparams["food1step"]
+        foodtype[0].interval = 1 / (agentparams["food1freq"] / 1440)
+        foodtype[0].reward = agentparams["food1taste"]             # currently oral reward equals taste
+        foodtype[0].density = agentparams["food1density"]          # energy units per unit volume
+        foodtype[0].start = agentparams["food1start"] * 1440
+        foodtype[0].stop = agentparams["food1stop"] * 1440
+
+        foodtype[1].step = agentparams["food2step"]
+        foodtype[1].interval = 1 / (agentparams["food2freq"] / 1440)
+        foodtype[1].reward = agentparams["food2taste"]
+        foodtype[1].density = agentparams["food2density"]
+        foodtype[1].start = agentparams["food2start"] * 1440
+        foodtype[1].stop = agentparams["food2stop"] * 1440
+
+
+
     ## Model() reads in the model parameters, initialises variables, and runs the main model loop
-    ##
     def Model(self):
         agentdata = self.mod.agentdata
         agentbox = self.mod.agentbox
-        agentparams = self.mod.agentbox.GetParams()
-        protoparams = self.mod.protobox.GetParams()
+        agentparams = self.params["agent"]
+        protoparams = self.params["proto"]
+        foodtype = self.mod.foodtype
 
         # Read parameters
-        runtime = int(agentparams["runtime"])
-        waterloss = agentparams["waterloss"]
+        runtime = 60 * int(agentparams["runtime"])                  # convert hours to minutes
+        basecost = agentparams["basecost"] / 1440                  # convert per day to per minute
+        feedthresh = agentparams["feedthresh"]
+
+        foodstep = agentparams["foodstep"]
+        foodfreq = agentparams["foodfreq"] / 1440                  # convert per day to per minute
+
+        gluco_set = agentparams["gluco_set"]
+        glyco_rate = agentparams["glyco_rate"]
+        glyco_max = agentparams["glyco_max"]
+        glyco_init = agentparams["glyco_init"]
+        absorp_rate = agentparams["absorp_rate"]
+        glyco_feed = agentparams["glyco_feed"]
+
+        energy_init = agentparams["energy_init"]
+        energy_max = agentparams["energy_max"]
+        gut_init = agentparams["gut_init"]
+        gut_max = agentparams["gut_max"]
+
+        full_thresh = agentparams["fullthresh"]
+        storecost_rate = agentparams["storecost_rate"] / 1440      # convert per day to per minute
+        feed_rate = agentparams["feed_rate"]
+        reward_base = agentparams["reward_base"]
+        reward_init = agentparams["reward_init"]
+        gut_factor = agentparams["gut_factor"]
+        fat_factor = agentparams["fat_factor"]
+
+        reward_tau = agentparams["reward_tau"]
+        reward_def_factor = agentparams["reward_def_factor"]
+
+        ghrelin_secrate = agentparams["ghrelin_secrate"]
+        ghrelin_decay = agentparams["ghrelin_decay"]
+
+        feedfreq = agentparams["feedfreq"] / 1440
+
+        reward_tau_oral = agentparams["reward_tau_oral"]
+        reward_weight_oral = agentparams["reward_weight_oral"]
+        reward_tau_gut = agentparams["reward_tau_gut"]
+        reward_weight_gut = agentparams["reward_weight_gut"]
+
+        eatrate = agentparams["eatrate"]
+
+        # Read model flags
+        modflags = self.agentbox.modflags
+        randfood = modflags["randfood"]
+        #glycoflag = modflags["glycoflag"]
+        #chamberflag = modflags["chamberflag"]
+        adlibflag = modflags["adlibflag"]
+        newrewardflag = modflags["newrewardflag"]
+        multifoodflag = modflags["multifoodflag"]
+        gutrewardflag = modflags["gutrewardflag"]
+        rewardbaseflag = modflags["rewardbaseflag"]
+
+
+        ## Calculated and control values
+        # Dynamic Reward   -  October/November 2018
+        reward_set_oral = 0
+        reward_set_gut = 0
+        reward_oral = 0
+        reward_gut = 0
+
+        reward_new = 0       # testing placeholder
+
+
+        # Multi Food Types  -  December 2018/January 2019
+        feed1 = 0
+        feed2 = 0            # out of use
+        gut1 = 0
+        gut2 = 0             # out of use
+
+        foodchoice = [FoodChoice() for _ in range(10)]
+        foodgut = [FoodGut() for _ in range(10)]
+        choicecount = 0
+        choicesum = 0
+        choicerand = 0
+        choicetype = 0
+        feedtype = 0
+
+        gut_sum = 0
+        intake_sum = 0
+        gut_count = 0
+
+        mealoffset = 60
+
+        appetite_v1 = False
+        appetite_v2 = True
+
+        numfoodtypes = 2;
+        randomflag = True
+        mealoffset = 60;
+        appetite_v1 = False
+        appetite_v2 = True
+        gut_init = 0
 
         # Initialise variables
-        water = 50
-        salt = 2000
-        osmo = salt / water
-        vaso = 0
+        appetite = 0
+        feedgen = 0
+        insulin = 0
+        glyco = glyco_init
+        chamber = 0
+
+        energy = energy_init
+        gut = gut_init
+        tfood = -math.log(1 - random()) / foodfreq
+        fullness = 0
+        food = 0
+        feed = 0
+        ghrelin = 0
+
+        if rewardbaseflag:
+            reward_mod = reward_init
+            reward_set = 0
+            reward_def = 0
+        else:
+            reward_def = 0
+            reward_set = 0
+            reward_mod = 0
+
+        reward_set_oral = 0
+        reward_set_gut = 0
+        reward_oral = 0
+        reward_gut = 0
+
+        feed1 = 0
+        feed2 = 0
+
+        for i in range(numfoodtypes):
+            foodtype[i].amount = 0
+            foodtype[i].gut = 0
+            if foodtype[i].stop < 0: foodtype[i].stop = runtime
+            for j in range(1000): foodtype[i].consumed[j] = 0
+
+        gut_sum = 0
 
         # Initialise model variable recording arrays
-        agentdata.water.clear()
-        agentdata.salt.clear()
-        agentdata.osmo.clear()
-        agentdata.vaso.clear()
+        # agentdata.water.clear()
+        # agentdata.salt.clear()
+        # agentdata.osmo.clear()
+        # agentdata.vaso.clear()
 
         # Initialise model variables
-        agentdata.water[0] = water
-        agentdata.salt[0] = salt
-        agentdata.osmo[0] = osmo
-        agentdata.vaso[0] = vaso
-        osmo_thresh = 280
-        v_grad = 0.2
-        v_max = 20
+        agentdata.energy[0] = energy
+        agentdata.appetite[0] = appetite
+        agentdata.glyco[0] = glyco
+        agentdata.insulin[0] = insulin
+        agentdata.chamber[0] = chamber
+        agentdata.gut[0] = gut
+        agentdata.feed[0] = feed
+        agentdata.food[0] = food
+        agentdata.reward[0] = 0
+        agentdata.fullness[0] = 0
+        agentdata.reward_def[0] = 0
+        agentdata.ghrelin[0] = 0
+
+        agentdata.reward_oral[0] = 0
+        agentdata.reward_gut[0] = 0
+        agentdata.reward_new[0] = 0
+
 
         # Run model loop
-        for i in range(1, runtime + 1):
+        for step in range(1, runtime + 1):
 
-            if i%100 == 0: agentbox.SetCount(i * 100 / runtime)     # Update run progress % in model panel
+            if step%100 == 0: agentbox.SetCount(step * 100 / runtime)     # Update run progress % in model panel
 
-            water = water - (water * waterloss)
-            salt = salt
-            osmo = salt / water
-            if osmo < osmo_thresh: vaso = 0
-            else: 
-                vaso = v_grad * (osmo - osmo_thresh)
-                if vaso > v_max: vaso = v_max
+            # Appetite V1 - currently not in use
+            if appetite_v1:
+                fullness = gut / gut_max
+                if fullness > full_thresh: food = 0
+
+            ## Reward V1 - basic dynamic
+            reward_def += (reward_set - reward_def) * reward_tau
+            if rewardbaseflag:
+                if reward_def < -reward_mod: reward_def = -reward_mod            # set reward_base minimum
+            reward_factor = reward_base + reward_mod + reward_def
+            reward = reward_factor * feed
+
+            ## Reward V2 - oral+gut dynamic                      started 19/10/18
+
+            # Reward Signals - including multi
+
+            reward_oral += (reward_set_oral - reward_oral) * reward_tau_oral
+            
+            reward_gut += (reward_set_gut - reward_gut) * reward_tau_gut
+
+            reward_new = reward_oral * reward_weight_oral + reward_gut * reward_weight_gut
+
+            if newrewardflag: reward = reward_factor * reward_new
+
+            # Appetite V2
+            if multifoodflag:
+                fullness = gut_factor * (gut_sum / gut_max) + fat_factor * (energy / 100000)
+                if feed and fullness > reward:
+                    feed = 0   # stop eating
+                    for i in range(numfoodtypes): foodtype[i].amount = 0    # discard available food when full
+                    DiagWrite(f"step {step} fullness {fullness:.4f} reward {reward:.4f}\n")
+            else:
+                if appetite_v2:
+                    fullness = gut_factor * (gut / gut_max) + fat_factor * (energy / 100000)
+                    if food and fullness > reward:
+                        food = 0   # discard available food when full         interval food
+                        feed = 0   # stop eating                              adlib food
+                        DiagWrite(f"step {step} fullness {fullness:.4f} reward {reward:.4f}\n")
+
+
+            # Eating V3 - multi type food events
+            if multifoodflag:
+                choicecount = 0
+                choicesum = 0
+                for i in range(numfoodtypes):          # create choice set - available food types
+                    if foodtype[i].amount >= feed_rate:
+                        foodchoice[choicecount].type = i
+                        foodchoice[choicecount].reward = foodtype[i].GetReward()
+                        choicesum = choicesum + foodchoice[choicecount].reward
+                        choicecount += 1
+
+                if choicecount:
+                    for i in range(choicecount): foodchoice[i].prob = foodchoice[i].reward / choicesum      # normalise reward values to generate relative probabilities
+                    choicerand = random.random()
+                    choicetype = 0
+                    while choicerand > foodchoice[choicetype].prob:                      # index random value to food choice type
+                        choicerand = choicerand - foodchoice[choicetype].prob
+                        choicetype += 1
+
+                    feed = feed_rate
+                    feedtype = foodchoice[choicetype].type
+                    foodtype[feedtype].amount = foodtype[feedtype].amount - feed_rate
+                    foodtype[feedtype].gut = foodtype[feedtype].gut + feed_rate
+                    foodtype[feedtype].consumed[step // 1440] = foodtype[feedtype].consumed[step // 1440] + feed_rate * foodtype[feedtype].density      # record consumption per day
+                    #mod.diagbox.Write(text.Format("step %d day %d consumed %.2f\n", step, step // 1440, foodtype[feedtype].consumed[step // 1440]))
+                    reward_set_oral = foodchoice[choicetype].reward
+                else:
+                    feed = 0
+                    reward_set_oral = 0
+
+            # Eating V2 - Ad Libitum
+            elif adlibflag:
+
+                feedprob = feedfreq * (1 - gut_factor * (gut / gut_max))      # gut satiety signal reduces meal initiation probability
+                #mod.diagbox.Write(text.Format("adlib test feedfreq %.4f feedprob %.4f", feedfreq, feedprob))
+                if not feed:
+                    if (1 - random.random()) < feedprob:
+                        feed = feed_rate
+                        #mod.diagbox.Write(" EAT\n")
+                    #else: mod.diagbox.Write(" FAIL\n")
+
+            # Eating V1 - single type food events
+            else:
+                if food >= feed_rate:      # eat whenever food available
+                    feed = feed_rate
+                    food = food - feed_rate
+                    feed1 = feed
+                    feed2 = 0
+                else:
+                    feed = 0
+                    feed1 = 0
+                    feed2 = 0
+
+
+            # Multi Digestion
+            if multifoodflag:
+                gut_sum = 0
+                gut_count = 0
+                intake_sum = 0
+
+                for i in range(numfoodtypes):
+                    if foodtype[i].gut > 0:
+                        gut_sum = gut_sum + foodtype[i].gut
+                        foodgut[gut_count].type = i
+                        #foodgut[gut_count].reward = foodtype[i].GetReward()
+                        gut_count += 1
+
+                if gut_sum >= absorp_rate:
+                    for i in range(gut_count):
+                        foodgut[i].proportion = foodtype[foodgut[i].type].gut / gut_sum
+                        intake_sum = intake_sum + foodgut[i].proportion * absorp_rate * foodtype[foodgut[i].type].density
+                        foodtype[foodgut[i].type].gut = foodtype[foodgut[i].type].gut - foodgut[i].proportion * absorp_rate
+                    energy_intake = intake_sum
+                else: energy_intake = 0
+            else:
+                # Digestion - single type
+                gut = gut + feed
+                if gut > gut_max: gut = gut_max
+
+                if gut >= absorp_rate:
+                    energy_intake = absorp_rate
+                    gut = gut - absorp_rate
+                else: energy_intake = 0
+
+            reward_set_gut = energy_intake
+
+
+            # Energy consumption
+            storecost = energy * storecost_rate
+            #if energy > 0: energy = energy - basecost - storecost + energy_intake
+            energy_diff = energy_intake - basecost - storecost
+            if energy > 0: energy += energy_diff
+
+            #if energy_diff < 0: reward_set = -(energy_diff * reward_def_factor)
+            #else: reward_set = 0
+            reward_set = -(energy_diff * reward_def_factor)
+
+
+            # Ghrelin
+            if not energy_intake: ghrelin_sec = ghrelin_secrate
+            else: ghrelin_sec = 0
+            ghrelin = ghrelin + ghrelin_sec - ghrelin_decay * ghrelin
 
             # Record model variables
-            agentdata.water[i] = water
-            agentdata.salt[i] = salt
-            agentdata.osmo[i] = osmo
-            agentdata.vaso[i] = vaso
+            agentdata.energy[step] = energy
+            agentdata.appetite[step] = appetite
+            agentdata.glyco[step] = glyco
+            agentdata.insulin[step] = insulin
+            agentdata.gut[step] = gut   # 100   # gut
+            agentdata.feed[step] = feed
+            agentdata.food[step] = food
+            agentdata.fullness[step] = fullness
+            agentdata.reward[step] = reward
+            agentdata.reward_def[step] = reward_factor   # reward_def
+            agentdata.ghrelin[step] = ghrelin
 
+            agentdata.energyLong[step // 60] = energy
+            agentdata.rewardLong[step // 60] = reward_factor
 
-        # Set plot time range
-        agentdata.water.xmax = runtime * 1.1
-        agentdata.salt.xmax = runtime * 1.1
-        agentdata.osmo.xmax = runtime * 1.1
-        agentdata.vaso.xmax = runtime * 1.1
+            agentdata.food1[step] = foodtype[0].amount
+            agentdata.food2[step] = foodtype[1].amount
 
+            agentdata.gut1[step] = foodtype[0].gut
+            agentdata.gut2[step] = foodtype[1].gut
 
+            agentdata.taste1[step] = foodtype[0].GetReward()
+            agentdata.taste2[step] = foodtype[1].GetReward()
 
-
+            agentdata.reward_oral[step] = reward_oral
+            agentdata.reward_gut[step] = reward_gut
+            agentdata.reward_new[step] = reward_new
 
 

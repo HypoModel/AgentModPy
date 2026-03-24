@@ -10,7 +10,7 @@
 
 
 import wx
-from HypoModPy.hypomain import HypoMain
+from HypoModPy.hypomain import HypoMain, go_foreground
 
 
 class HypoApp(wx.App):
@@ -25,6 +25,7 @@ class HypoApp(wx.App):
         self.SetTopWindow(self.mainwin)
         self.mainwin.Show()
         self.mainwin.SetFocus()
+        go_foreground()
         return True
 
 app = HypoApp(False)
