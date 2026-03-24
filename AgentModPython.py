@@ -10,21 +10,27 @@
 
 
 import wx
-from HypoModPy.hypomain import *
+from HypoModPy.hypomain import HypoMain
 
 
+class HypoApp(wx.App):
+    def OnInit(self):
+        pos = wx.DefaultPosition
+        size = wx.Size(400, 500)
+        mainpath = ""
+        respath = ""
+        modname = "Agent"
 
-app = wx.App(False)
-pos = wx.DefaultPosition
-size = wx.Size(400, 500)
-mainpath = ""
-respath = ""
-modname = "Agent"
-mainwin = HypoMain("HypoMod", pos, size, respath, mainpath, modname)
-mainwin.Show()
-mainwin.SetFocus()
-#go_foreground()
+        self.mainwin = HypoMain("HypoMod", pos, size, respath, mainpath, modname)
+        self.SetTopWindow(self.mainwin)
+        self.mainwin.Show()
+        self.mainwin.SetFocus()
+        return True
+
+app = HypoApp(False)
 app.MainLoop()
+
+
 
 
 
