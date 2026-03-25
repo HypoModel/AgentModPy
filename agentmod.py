@@ -4,6 +4,7 @@ import random
 import math
 from datetime import datetime
 
+from matplotlib import text
 import wx
 
 from HypoModPy.hypomods import (
@@ -15,78 +16,10 @@ from HypoModPy.hypomods import (
 from HypoModPy.hypoparams import ParamBox
 from HypoModPy.hypodat import PlotDat, datarray, pdata
 from HypoModPy.hypogrid import GridBox
-from HypoModPy.hypomain import DiagWrite
+from HypoModPy.hypotools import DiagWrite
 
 from agentpanels import AgentBox, AgentProtoBox
-
-
-
-class AgentDat():
-    def __init__(self, storesize):
-        self.storesize = storesize
-
-        # initialise arrays for recording model variables (or any model values)
-        self.energy = pdata(self.storesize + 1)
-        self.appetite = pdata(self.storesize + 1)
-        self.glyco = pdata(self.storesize + 1)
-        self.insulin = pdata(self.storesize + 1)
-        self.chamber = pdata(self.storesize + 1)
-        self.gut = pdata(self.storesize + 1)
-        self.feed = pdata(self.storesize + 1)
-        self.food = pdata(self.storesize + 1)
-        self.reward = pdata(self.storesize + 1)
-        self.reward_def = pdata(self.storesize + 1)
-        self.fullness = pdata(self.storesize + 1)
-        self.ghrelin = pdata(self.storesize + 1)
-        self.energyLong = pdata(self.storesize + 1)
-        self.rewardLong = pdata(self.storesize + 1)
-        self.reward_oral = pdata(self.storesize + 1)
-        self.reward_gut = pdata(self.storesize + 1)
-        self.reward_new = pdata(self.storesize + 1)
-        self.food1 = pdata(self.storesize + 1)
-        self.food2 = pdata(self.storesize + 1)
-    
-
-
-class FoodDat():
-    def __init__(self, storesize):
-        self.storesize = storesize
-
-        # parameters
-        self.amount = 0
-        self.step = 0
-        self.interval = 0
-        self.density = 0
-        self.reward = 0
-        self.taste = 0
-        self.cost = 0
-        self.basereward = 0
-        self.desens = 0
-        self.gut = 0
-        self.start = 0
-        self.stop = 0
-
-        # recording arrays
-        self.consumed = pdata(self.storesize + 1)
-
-    def GetReward(self):
-        return self.reward
-
-
-class FoodChoice():
-    def __init__(self):
-        self.reward = 0
-        self.type = 0
-        self.prob = 0
-
-
-class FoodGut():
-    def __init__(self):
-        self.reward = 0
-        self.type = 0
-        self.amount = 0
-        self.density = 0
-        self.proportion = 0
+from agentdat import AgentDat, FoodDat, FoodChoice, FoodGut
 
 
 class AgentMod(Mod):
@@ -200,8 +133,7 @@ class AgentModel(ModThread):
         self.mainwin = mod.mainwin
         self.scalebox = mod.mainwin.scalebox
 
-    ## run() is the thread entry function, used to initialise and call the main Model() function 
-    ##    
+    ## run() is the thread entry function, used to initialise and call the main Model() function    
     def run(self):
         # Read model flags
         self.randomflag = self.agentbox.modflags["randomflag"]      # model flags are useful for switching elements of the model code while running
@@ -330,12 +262,8 @@ class AgentModel(ModThread):
         appetite_v1 = False
         appetite_v2 = True
 
-        numfoodtypes = 2;
-        randomflag = True
-        mealoffset = 60;
-        appetite_v1 = False
-        appetite_v2 = True
-        gut_init = 0
+        numfoodtypes = 2
+        
 
         # Initialise variables
         appetite = 0
@@ -346,7 +274,7 @@ class AgentModel(ModThread):
 
         energy = energy_init
         gut = gut_init
-        tfood = -math.log(1 - random()) / foodfreq
+        tfood = -math.log(1 - random.random()) / foodfreq
         fullness = 0
         food = 0
         feed = 0
@@ -383,7 +311,6 @@ class AgentModel(ModThread):
         # agentdata.osmo.clear()
         # agentdata.vaso.clear()
 
-        # Initialise model variables
         agentdata.energy[0] = energy
         agentdata.appetite[0] = appetite
         agentdata.glyco[0] = glyco
@@ -447,6 +374,24 @@ class AgentModel(ModThread):
                         DiagWrite(f"step {step} fullness {fullness:.4f} reward {reward:.4f}\n")
 
 
+            # Poisson random food events
+            nfood = 0
+            if randfood and foodfreq > 0:
+                while tfood < step:
+                    nfood += 1
+                    food = food + foodstep
+                    DiagWrite(f"\nfood event at {step}\n")
+                    tfood = (-math.log(1 - random.random()) / foodfreq) + tfood
+
+            # Regular food events
+            foodinterval = 1 / foodfreq
+            if not randfood and (step + mealoffset) % int(foodinterval) == 0: food = food + foodstep
+
+            for i in range(numfoodtypes):
+                if step >= foodtype[i].start and step <= foodtype[i].stop and ((step + mealoffset + foodtype[i].start) % int(foodtype[i].interval) == 0):
+                    foodtype[i].amount = foodtype[i].amount + foodtype[i].step
+
+
             # Eating V3 - multi type food events
             if multifoodflag:
                 choicecount = 0
@@ -471,7 +416,7 @@ class AgentModel(ModThread):
                     foodtype[feedtype].amount = foodtype[feedtype].amount - feed_rate
                     foodtype[feedtype].gut = foodtype[feedtype].gut + feed_rate
                     foodtype[feedtype].consumed[step // 1440] = foodtype[feedtype].consumed[step // 1440] + feed_rate * foodtype[feedtype].density      # record consumption per day
-                    #mod.diagbox.Write(text.Format("step %d day %d consumed %.2f\n", step, step // 1440, foodtype[feedtype].consumed[step // 1440]))
+                    DiagWrite(f"step {step} day {step // 1440} consumed {foodtype[feedtype].consumed[step // 1440]:.2f}\n")
                     reward_set_oral = foodchoice[choicetype].reward
                 else:
                     feed = 0
@@ -481,7 +426,7 @@ class AgentModel(ModThread):
             elif adlibflag:
 
                 feedprob = feedfreq * (1 - gut_factor * (gut / gut_max))      # gut satiety signal reduces meal initiation probability
-                #mod.diagbox.Write(text.Format("adlib test feedfreq %.4f feedprob %.4f", feedfreq, feedprob))
+                DiagWrite(f"adlib test feedfreq {feedfreq:.4f} feedprob {feedprob:.4f}\n")
                 if not feed:
                     if (1 - random.random()) < feedprob:
                         feed = feed_rate
