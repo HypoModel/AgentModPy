@@ -136,8 +136,18 @@ class AgentModel(ModThread):
     ## run() is the thread entry function, used to initialise and call the main Model() function    
     def run(self):
         # Read model flags
-        self.randomflag = self.agentbox.modflags["randomflag"]      # model flags are useful for switching elements of the model code while running
+        modflags = self.agentbox.modflags
+        self.randomflag = modflags["randomflag"]      # model flags are useful for switching elements of the model code while running
+        self.randfood = modflags["randfood"]
+        #glycoflag = modflags["glycoflag"]
+        #chamberflag = modflags["chamberflag"]
+        self.adlibflag = modflags["adlibflag"]
+        self.newrewardflag = modflags["newrewardflag"]
+        self.multifoodflag = modflags["multifoodflag"]
+        self.gutrewardflag = modflags["gutrewardflag"]
+        self.rewardbaseflag = modflags["rewardbaseflag"]
 
+        # Set random seed
         if self.randomflag: random.seed(0)
         else: random.seed(datetime.now().microsecond)
 
@@ -165,7 +175,6 @@ class AgentModel(ModThread):
         foodtype[1].stop = agentparams["food2stop"] * 1440
 
 
-
     ## Model() reads in the model parameters, initialises variables, and runs the main model loop
     def Model(self):
         agentdata = self.mod.agentdata
@@ -179,72 +188,58 @@ class AgentModel(ModThread):
         basecost = agentparams["basecost"] / 1440                  # convert per day to per minute
         feedthresh = agentparams["feedthresh"]
 
+        # basic food parameters
         foodstep = agentparams["foodstep"]
         foodfreq = agentparams["foodfreq"] / 1440                  # convert per day to per minute
 
+        # glycogen and glucose parameters - currently not in use
         gluco_set = agentparams["gluco_set"]
         glyco_rate = agentparams["glyco_rate"]
         glyco_max = agentparams["glyco_max"]
         glyco_init = agentparams["glyco_init"]
-        absorp_rate = agentparams["absorp_rate"]
         glyco_feed = agentparams["glyco_feed"]
 
+        # energy store and gut parameters
+        absorp_rate = agentparams["absorp_rate"]
         energy_init = agentparams["energy_init"]
-        energy_max = agentparams["energy_max"]
+        energy_max = agentparams["energy_max"] # currently not in use
         gut_init = agentparams["gut_init"]
         gut_max = agentparams["gut_max"]
-
-        full_thresh = agentparams["fullthresh"]
+        
         storecost_rate = agentparams["storecost_rate"] / 1440      # convert per day to per minute
+        full_thresh = agentparams["fullthresh"]
+        
         feed_rate = agentparams["feed_rate"]
+        feedfreq = agentparams["feedfreq"] / 1440
+        eatrate = agentparams["eatrate"]
+
+        # reward parameters
         reward_base = agentparams["reward_base"]
         reward_init = agentparams["reward_init"]
         gut_factor = agentparams["gut_factor"]
         fat_factor = agentparams["fat_factor"]
-
         reward_tau = agentparams["reward_tau"]
         reward_def_factor = agentparams["reward_def_factor"]
-
-        ghrelin_secrate = agentparams["ghrelin_secrate"]
-        ghrelin_decay = agentparams["ghrelin_decay"]
-
-        feedfreq = agentparams["feedfreq"] / 1440
-
         reward_tau_oral = agentparams["reward_tau_oral"]
         reward_weight_oral = agentparams["reward_weight_oral"]
         reward_tau_gut = agentparams["reward_tau_gut"]
         reward_weight_gut = agentparams["reward_weight_gut"]
 
-        eatrate = agentparams["eatrate"]
+        # prototype ghrelin/appetite signal model parameters
+        ghrelin_secrate = agentparams["ghrelin_secrate"]
+        ghrelin_decay = agentparams["ghrelin_decay"]
 
-        # Read model flags
-        modflags = self.agentbox.modflags
-        randfood = modflags["randfood"]
-        #glycoflag = modflags["glycoflag"]
-        #chamberflag = modflags["chamberflag"]
-        adlibflag = modflags["adlibflag"]
-        newrewardflag = modflags["newrewardflag"]
-        multifoodflag = modflags["multifoodflag"]
-        gutrewardflag = modflags["gutrewardflag"]
-        rewardbaseflag = modflags["rewardbaseflag"]
+        
+        # Calculated and control values
 
-
-        ## Calculated and control values
         # Dynamic Reward   -  October/November 2018
         reward_set_oral = 0
         reward_set_gut = 0
         reward_oral = 0
         reward_gut = 0
-
         reward_new = 0       # testing placeholder
 
-
         # Multi Food Types  -  December 2018/January 2019
-        feed1 = 0
-        feed2 = 0            # out of use
-        gut1 = 0
-        gut2 = 0             # out of use
-
         foodchoice = [FoodChoice() for _ in range(10)]
         foodgut = [FoodGut() for _ in range(10)]
         choicecount = 0
@@ -256,15 +251,12 @@ class AgentModel(ModThread):
         gut_sum = 0
         intake_sum = 0
         gut_count = 0
-
         mealoffset = 60
-
+        numfoodtypes = 2
         appetite_v1 = False
         appetite_v2 = True
 
-        numfoodtypes = 2
         
-
         # Initialise variables
         appetite = 0
         feedgen = 0
@@ -280,7 +272,7 @@ class AgentModel(ModThread):
         feed = 0
         ghrelin = 0
 
-        if rewardbaseflag:
+        if self.rewardbaseflag:
             reward_mod = reward_init
             reward_set = 0
             reward_def = 0
