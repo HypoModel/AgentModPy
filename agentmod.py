@@ -142,21 +142,21 @@ class AgentModel(ModThread):
         #glycoflag = modflags["glycoflag"]
         #chamberflag = modflags["chamberflag"]
         self.adlibflag = modflags["adlibflag"]
-        self.newrewardflag = modflags["newrewardflag"]
-        self.multifoodflag = modflags["multifoodflag"]
-        self.gutrewardflag = modflags["gutrewardflag"]
-        self.rewardbaseflag = modflags["rewardbaseflag"]
+        #self.newrewardflag = modflags["newrewardflag"]
+        #self.multifoodflag = modflags["multifoodflag"]
+        #self.gutrewardflag = modflags["gutrewardflag"]
+        #self.rewardbaseflag = modflags["rewardbaseflag"]
 
         # Set random seed
         if self.randomflag: random.seed(0)
         else: random.seed(datetime.now().microsecond)
 
-        self.Initialise()
-        self.Model()
+        #self.Food_Initialise()
+        self.Model_Basic()
         wx.QueueEvent(self.mod, ModThreadEvent(ModThreadCompleteEvent))
 
 
-    def Initialise(self):
+    def Food_Initialise(self):
         agentparams = self.params["agent"]
         foodtype = self.mod.foodtype
 
@@ -173,6 +173,166 @@ class AgentModel(ModThread):
         foodtype[1].density = agentparams["food2density"]
         foodtype[1].start = agentparams["food2start"] * 1440
         foodtype[1].stop = agentparams["food2stop"] * 1440
+
+
+
+    def Model_Basic(self):
+        agentdata = self.mod.agentdata
+        agentbox = self.mod.agentbox
+        agentparams = self.params["agent"]
+        protoparams = self.params["proto"]
+
+        # Read parameters
+        runtime = 60 * int(agentparams["runtime"])                  # convert hours to minutes
+        basecost = agentparams["basecost"] / 1440                  # convert per day to per minute
+
+        # basic food parameters
+        foodstep = agentparams["foodstep"]
+        foodfreq = agentparams["foodfreq"] / 1440                  # convert per day to per minute
+
+        # energy store and gut parameters
+        absorp_rate = agentparams["absorp_rate"]
+        energy_init = agentparams["energy_init"]
+        gut_init = agentparams["gut_init"]
+        gut_max = agentparams["gut_max"]
+        
+        storecost_rate = agentparams["storecost_rate"] / 1440      # convert per day to per minute
+        full_thresh = agentparams["fullthresh"]
+        
+        feed_rate = agentparams["feed_rate"]
+        feedfreq = agentparams["feedfreq"] / 1440
+       
+        # reward parameters
+        reward_base = agentparams["reward_base"]
+        gut_factor = agentparams["gut_factor"]
+        fat_factor = agentparams["fat_factor"]
+
+        reward_factor = reward_base
+        
+
+        # prototype ghrelin/appetite signal model parameters
+        ghrelin_secrate = agentparams["ghrelin_secrate"]
+        ghrelin_decay = agentparams["ghrelin_decay"]
+
+        
+        # Calculated and control values
+        gut_sum = 0
+        intake_sum = 0
+        gut_count = 0
+        mealoffset = 60
+        
+        # Initialise variables
+        appetite = 0
+        energy = energy_init
+        gut = gut_init
+        tfood = -math.log(1 - random.random()) / foodfreq
+        fullness = 0
+        available_food = 0
+        feeding = 0
+        ghrelin = 0
+
+        agentdata.energy[0] = energy
+        agentdata.appetite[0] = appetite
+        agentdata.gut[0] = gut
+        agentdata.feeding[0] = feeding
+        agentdata.food[0] = available_food
+        agentdata.reward[0] = 0
+        agentdata.fullness[0] = 0
+        agentdata.reward_def[0] = 0
+        agentdata.ghrelin[0] = 0
+
+        agentdata.reward_oral[0] = 0
+        agentdata.reward_gut[0] = 0
+        agentdata.reward_new[0] = 0
+
+
+        # Run model loop
+        for step in range(1, runtime + 1):
+
+            if step%100 == 0: agentbox.SetCount(step * 100 / runtime)     # Update run progress % in model panel
+
+            # Reward - basic fixed reward
+            reward = reward_factor * feeding
+
+                
+            fullness = gut_factor * (gut / gut_max) + fat_factor * (energy / 100000)
+            if available_food and fullness > reward:
+                available_food = 0   # discard available food when full         interval food
+                feeding = 0   # stop eating                              adlib food
+                DiagWrite(f"step {step} fullness {fullness:.4f} reward {reward:.4f}\n")         
+
+
+            # Poisson random food events
+            nfood = 0
+            if self.randfood and foodfreq > 0:
+                while tfood < step:
+                    nfood += 1
+                    food = food + foodstep
+                    DiagWrite(f"\nfood event at {step}\n")
+                    tfood = (-math.log(1 - random.random()) / foodfreq) + tfood
+
+            # Regular food events
+            foodinterval = 1 / foodfreq
+            if not self.randfood and (step + mealoffset) % int(foodinterval) == 0: food = food + foodstep
+
+
+            # Eating V2 - Ad Libitum
+            if self.adlibflag:
+                feedprob = feedfreq * (1 - gut_factor * (gut / gut_max))      # gut satiety signal reduces meal initiation probability
+                DiagWrite(f"adlib test feedfreq {feedfreq:.4f} feedprob {feedprob:.4f}\n")
+                if not feeding:
+                    if (1 - random.random()) < feedprob:
+                        feeding = feed_rate
+                        #mod.diagbox.Write(" EAT\n")
+                    #else: mod.diagbox.Write(" FAIL\n")
+
+            # Eating V1 - single type food events
+            else:
+                if food >= feed_rate:      # eat whenever food available
+                    feeding = feed_rate
+                    food = food - feed_rate
+                   
+                else:
+                    feeding = 0
+                  
+
+            # Digestion - single type
+            gut = gut + feeding
+            if gut > gut_max: gut = gut_max
+
+            if gut >= absorp_rate:
+                energy_intake = absorp_rate
+                gut = gut - absorp_rate
+            else: energy_intake = 0
+
+
+            # Energy consumption
+            storecost = energy * storecost_rate
+            #if energy > 0: energy = energy - basecost - storecost + energy_intake
+            energy_diff = energy_intake - basecost - storecost
+            if energy > 0: energy += energy_diff
+
+
+            # Ghrelin
+            if not energy_intake: ghrelin_sec = ghrelin_secrate
+            else: ghrelin_sec = 0
+            ghrelin = ghrelin + ghrelin_sec - ghrelin_decay * ghrelin
+
+            # Record model variables
+            agentdata.energy[step] = energy
+            agentdata.appetite[step] = appetite
+            agentdata.gut[step] = gut   
+            agentdata.feeding[step] = feeding
+            agentdata.food[step] = food
+            agentdata.fullness[step] = fullness
+            agentdata.reward[step] = reward
+            agentdata.ghrelin[step] = ghrelin
+
+            agentdata.energyLong[step // 60] = energy
+            agentdata.rewardLong[step // 60] = reward_factor
+
+
+
 
 
     ## Model() reads in the model parameters, initialises variables, and runs the main model loop
@@ -333,7 +493,7 @@ class AgentModel(ModThread):
 
             ## Reward V1 - basic dynamic
             reward_def += (reward_set - reward_def) * reward_tau
-            if rewardbaseflag:
+            if self.rewardbaseflag:
                 if reward_def < -reward_mod: reward_def = -reward_mod            # set reward_base minimum
             reward_factor = reward_base + reward_mod + reward_def
             reward = reward_factor * feed
@@ -348,7 +508,7 @@ class AgentModel(ModThread):
 
             reward_new = reward_oral * reward_weight_oral + reward_gut * reward_weight_gut
 
-            if newrewardflag: reward = reward_factor * reward_new
+            if self.newrewardflag: reward = reward_factor * reward_new
 
             # Appetite V2
             if multifoodflag:
@@ -368,7 +528,7 @@ class AgentModel(ModThread):
 
             # Poisson random food events
             nfood = 0
-            if randfood and foodfreq > 0:
+            if self.randfood and foodfreq > 0:
                 while tfood < step:
                     nfood += 1
                     food = food + foodstep
@@ -377,7 +537,7 @@ class AgentModel(ModThread):
 
             # Regular food events
             foodinterval = 1 / foodfreq
-            if not randfood and (step + mealoffset) % int(foodinterval) == 0: food = food + foodstep
+            if not self.randfood and (step + mealoffset) % int(foodinterval) == 0: food = food + foodstep
 
             for i in range(numfoodtypes):
                 if step >= foodtype[i].start and step <= foodtype[i].stop and ((step + mealoffset + foodtype[i].start) % int(foodtype[i].interval) == 0):
@@ -385,7 +545,7 @@ class AgentModel(ModThread):
 
 
             # Eating V3 - multi type food events
-            if multifoodflag:
+            if self.multifoodflag:
                 choicecount = 0
                 choicesum = 0
                 for i in range(numfoodtypes):          # create choice set - available food types
@@ -415,7 +575,7 @@ class AgentModel(ModThread):
                     reward_set_oral = 0
 
             # Eating V2 - Ad Libitum
-            elif adlibflag:
+            elif self.adlibflag:
 
                 feedprob = feedfreq * (1 - gut_factor * (gut / gut_max))      # gut satiety signal reduces meal initiation probability
                 DiagWrite(f"adlib test feedfreq {feedfreq:.4f} feedprob {feedprob:.4f}\n")
@@ -439,7 +599,7 @@ class AgentModel(ModThread):
 
 
             # Multi Digestion
-            if multifoodflag:
+            if self.multifoodflag:
                 gut_sum = 0
                 gut_count = 0
                 intake_sum = 0

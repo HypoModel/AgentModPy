@@ -27,7 +27,7 @@ class AgentBox(ParamBox):
         #self.paramset.AddCon("hstep", "h Step", 1, 0.1, 1)
         #self.paramset.AddCon("waterloss", "Water Loss", 0, 0.00001, 5)
 
-        paneltype = "Work"
+        paneltype = "Bristol"
 
         if paneltype == "Default": self.DefaultPanel()
         if paneltype == "Bristol": self.BristolPanel()
@@ -106,8 +106,8 @@ class AgentBox(ParamBox):
             numwidth = 60
             labelwidth = 70
 
-        self.SetModFlag("randfood", "Random Feed", 0)
-        self.SetModFlag("adlibflag", "Ad Libitum", 0)
+        self.AddFlag("randfood", "Random Food", 0)
+        self.AddFlag("adlibflag", "Ad Libitum", 0)
 
         # Parameter controls
         #
