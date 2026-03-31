@@ -361,6 +361,7 @@ class AgentModel(ModThread):
         energy_init = agentparams["energy_init"]
         energy_max = agentparams["energy_max"] # currently not in use
         gut_max = agentparams["gut_max"]
+        gut_init = 0
         
         storecost_rate = agentparams["storecost_rate"] / 1440      # convert per day to per minute
         full_thresh = agentparams["fullthresh"]
@@ -507,7 +508,7 @@ class AgentModel(ModThread):
             if self.newrewardflag: reward = reward_factor * reward_new
 
             # Appetite V2
-            if multifoodflag:
+            if self.multifoodflag:
                 fullness = gut_factor * (gut_sum / gut_max) + fat_factor * (energy / 100000)
                 if feed and fullness > reward:
                     feed = 0   # stop eating
