@@ -15,7 +15,7 @@ class AgentDat():
         self.insulin = pdata(self.storesize + 1)
         self.chamber = pdata(self.storesize + 1)
         self.gut = pdata(self.storesize + 1)
-        self.feed = pdata(self.storesize + 1)
+        self.feeding = pdata(self.storesize + 1)
         self.food = pdata(self.storesize + 1)
         self.reward = pdata(self.storesize + 1)
         self.reward_def = pdata(self.storesize + 1)

@@ -70,7 +70,7 @@ class AgentBox(ParamBox):
         # AddCon(tag string, display string, initial value, click increment, decimal places)
         # ----------------------------------------------------------------------------------
 
-        self.paramset.AddCon("runtime", "Run Time", 2000, 1, 0)
+        self.paramset.AddCon("runtime", "Run Time", 100, 1, 0)
         self.paramset.AddCon("hstep", "h Step", 1, 0.1, 1)
         self.paramset.AddCon("basecost", "Base Cost", 0, 1, 4)
         self.paramset.AddCon("feedthresh", "Feed Thresh", 0, 1, 2)
@@ -114,7 +114,7 @@ class AgentBox(ParamBox):
         # AddCon(tag string, display string, initial value, click increment, decimal places)
         # ----------------------------------------------------------------------------------
 
-        self.paramset.AddCon("runtime", "Run Time", 2000, 1, 0, labelwidth, numwidth)
+        self.paramset.AddCon("runtime", "Run Time", 100, 1, 0, labelwidth, numwidth)
         self.paramset.AddCon("basecost", "basecost", 0, 10, 2, labelwidth, numwidth)
         self.paramset.AddCon("foodstep", "foodstep", 0, 100, 2, labelwidth, numwidth)
         self.paramset.AddCon("foodfreq", "foodfreq", 0.01, 0.1, 2, labelwidth, numwidth)

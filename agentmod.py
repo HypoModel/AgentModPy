@@ -75,8 +75,8 @@ class AgentMod(Mod):
         #self.plotbase.AddPlot(PlotDat(self.agentdata.insulin, 0, 2000, 0, 2000, "insulin", "line", 1, "blue"), "insulin")
         #self.plotbase.AddPlot(PlotDat(self.agentdata.chamber, 0, 2000, 0, 2000, "chamber", "line", 1, "green"), "chamber")
         self.plotbase.AddPlot(PlotDat(self.agentdata.gut, 0, 2000, 0, 2000, "gut", "line", scalefactor, "green"), "gut")
-        self.plotbase.AddPlot(PlotDat(self.agentdata.feed, 0, 2000, 0, 2000, "feed", "line", scalefactor, "red"), "feed")
-        self.plotbase.AddPlot(PlotDat(self.agentdata.food, 0, 2000, 0, 100, "food", "line", scalefactor, "blue"), "food")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.feeding, 0, 2000, 0, 2000, "feeding", "line", scalefactor, "red"), "feeding")
+        self.plotbase.AddPlot(PlotDat(self.agentdata.food, 0, 2000, 0, 100, "available food", "line", scalefactor, "blue"), "food")
         self.plotbase.AddPlot(PlotDat(self.agentdata.reward, 0, 2000, 0, 100, "reward", "line", scalefactor, "green"), "reward")
         self.plotbase.AddPlot(PlotDat(self.agentdata.reward_def, 0, 2000, 0, 100, "reward def", "line", scalefactor, "red"), "reward_def")
         self.plotbase.AddPlot(PlotDat(self.agentdata.fullness, 0, 2000, 0, 100, "fullness", "line", scalefactor, "red"), "fullness")
@@ -101,7 +101,7 @@ class AgentMod(Mod):
     def DefaultPlots(self):
         if len(self.mainwin.panelset) > 0: self.mainwin.panelset[0].settag = "energy"
         if len(self.mainwin.panelset) > 1: self.mainwin.panelset[1].settag = "gut"
-        if len(self.mainwin.panelset) > 2: self.mainwin.panelset[2].settag = "feed"
+        if len(self.mainwin.panelset) > 2: self.mainwin.panelset[2].settag = "feeding"
 
 
     def OnModThreadComplete(self, event):
@@ -193,12 +193,11 @@ class AgentModel(ModThread):
         # energy store and gut parameters
         absorp_rate = agentparams["absorp_rate"]
         energy_init = agentparams["energy_init"]
-        gut_init = agentparams["gut_init"]
         gut_max = agentparams["gut_max"]
+        gut_init = 0
         
         storecost_rate = agentparams["storecost_rate"] / 1440      # convert per day to per minute
-        full_thresh = agentparams["fullthresh"]
-        
+
         feed_rate = agentparams["feed_rate"]
         feedfreq = agentparams["feedfreq"] / 1440
        
@@ -219,7 +218,8 @@ class AgentModel(ModThread):
         gut_sum = 0
         intake_sum = 0
         gut_count = 0
-        mealoffset = 60
+        meal_offset = 30
+
         
         # Initialise variables
         appetite = 0
@@ -262,18 +262,19 @@ class AgentModel(ModThread):
                 DiagWrite(f"step {step} fullness {fullness:.4f} reward {reward:.4f}\n")         
 
 
+            # Food Availability
             # Poisson random food events
             nfood = 0
             if self.randfood and foodfreq > 0:
                 while tfood < step:
                     nfood += 1
-                    food = food + foodstep
+                    available_food = available_food + foodstep
                     DiagWrite(f"\nfood event at {step}\n")
                     tfood = (-math.log(1 - random.random()) / foodfreq) + tfood
 
             # Regular food events
             foodinterval = 1 / foodfreq
-            if not self.randfood and (step + mealoffset) % int(foodinterval) == 0: food = food + foodstep
+            if not self.randfood and (step + meal_offset) % int(foodinterval) == 0: available_food = available_food + foodstep
 
 
             # Eating V2 - Ad Libitum
@@ -288,10 +289,9 @@ class AgentModel(ModThread):
 
             # Eating V1 - single type food events
             else:
-                if food >= feed_rate:      # eat whenever food available
+                if available_food >= feed_rate:      # eat whenever food available
                     feeding = feed_rate
-                    food = food - feed_rate
-                   
+                    available_food = available_food - feed_rate
                 else:
                     feeding = 0
                   
@@ -306,12 +306,11 @@ class AgentModel(ModThread):
             else: energy_intake = 0
 
 
-            # Energy consumption
+            # Energy consumption and intake
             storecost = energy * storecost_rate
-            #if energy > 0: energy = energy - basecost - storecost + energy_intake
-            energy_diff = energy_intake - basecost - storecost
-            if energy > 0: energy += energy_diff
-
+            energy = energy - basecost - storecost + energy_intake
+            if energy < 0: energy = 0
+            
 
             # Ghrelin
             if not energy_intake: ghrelin_sec = ghrelin_secrate
@@ -323,15 +322,13 @@ class AgentModel(ModThread):
             agentdata.appetite[step] = appetite
             agentdata.gut[step] = gut   
             agentdata.feeding[step] = feeding
-            agentdata.food[step] = food
+            agentdata.food[step] = available_food
             agentdata.fullness[step] = fullness
             agentdata.reward[step] = reward
             agentdata.ghrelin[step] = ghrelin
 
             agentdata.energyLong[step // 60] = energy
             agentdata.rewardLong[step // 60] = reward_factor
-
-
 
 
 
@@ -363,7 +360,6 @@ class AgentModel(ModThread):
         absorp_rate = agentparams["absorp_rate"]
         energy_init = agentparams["energy_init"]
         energy_max = agentparams["energy_max"] # currently not in use
-        gut_init = agentparams["gut_init"]
         gut_max = agentparams["gut_max"]
         
         storecost_rate = agentparams["storecost_rate"] / 1440      # convert per day to per minute
@@ -411,7 +407,7 @@ class AgentModel(ModThread):
         gut_sum = 0
         intake_sum = 0
         gut_count = 0
-        mealoffset = 60
+        meal_offset = 60
         numfoodtypes = 2
         appetite_v1 = False
         appetite_v2 = True
@@ -537,10 +533,10 @@ class AgentModel(ModThread):
 
             # Regular food events
             foodinterval = 1 / foodfreq
-            if not self.randfood and (step + mealoffset) % int(foodinterval) == 0: food = food + foodstep
+            if not self.randfood and (step + meal_offset) % int(foodinterval) == 0: food = food + foodstep
 
             for i in range(numfoodtypes):
-                if step >= foodtype[i].start and step <= foodtype[i].stop and ((step + mealoffset + foodtype[i].start) % int(foodtype[i].interval) == 0):
+                if step >= foodtype[i].start and step <= foodtype[i].stop and ((step + meal_offset + foodtype[i].start) % int(foodtype[i].interval) == 0):
                     foodtype[i].amount = foodtype[i].amount + foodtype[i].step
 
 
