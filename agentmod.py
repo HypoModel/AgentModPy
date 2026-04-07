@@ -7,7 +7,7 @@ from datetime import datetime
 from matplotlib import text
 import wx
 
-from HypoModPy.hypomods import (
+from HypoModPy.hypomods import(
     Mod,
     ModThread,
     ModThreadEvent,
