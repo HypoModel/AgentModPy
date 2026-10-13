@@ -230,6 +230,8 @@ class AgentModel(ModThread):
         available_food = 0
         feeding = 0
         ghrelin = 0
+        AGRP = 0
+        POMC = 0
 
         agentdata.energy[0] = energy
         agentdata.appetite[0] = appetite
@@ -240,6 +242,8 @@ class AgentModel(ModThread):
         agentdata.fullness[0] = 0
         agentdata.reward_def[0] = 0
         agentdata.ghrelin[0] = 0
+        agentdata.AGRP[0] = 0
+        agentdata.POMC[0] = 0
 
         agentdata.reward_oral[0] = 0
         agentdata.reward_gut[0] = 0
@@ -259,7 +263,13 @@ class AgentModel(ModThread):
             if available_food and fullness > reward:
                 available_food = 0   # discard available food when full         interval food
                 feeding = 0   # stop eating                              adlib food
-                DiagWrite(f"step {step} fullness {fullness:.4f} reward {reward:.4f}\n")         
+                DiagWrite(f"step {step} fullness {fullness:.4f} reward {reward:.4f}\n")     
+
+
+            # Arcuate Nucleus - AGRP/POMC satiety signals   
+            AGRP_set = ghrelin 
+            AGRP = AGRP - tau_AGRP * (AGRP - AGRP_set)
+            POMC = POMC - tau_POMC * (POMC - POMC_set)
 
 
             # Food Availability
@@ -326,6 +336,8 @@ class AgentModel(ModThread):
             agentdata.fullness[step] = fullness
             agentdata.reward[step] = reward
             agentdata.ghrelin[step] = ghrelin
+            agentdata.AGRP[step] = AGRP
+            agentdata.POMC[step] = POMC
 
             agentdata.energyLong[step // 60] = energy
             agentdata.rewardLong[step // 60] = reward_factor
