@@ -18,8 +18,8 @@ from HypoModPy.hypodat import PlotDat, datarray, pdata
 from HypoModPy.hypogrid import GridBox
 from HypoModPy.hypotools import DiagWrite
 
-from agentpanels import AgentBox, AgentProtoBox
-from agentdat import AgentDat, FoodDat, FoodChoice, FoodGut
+from AgentModPy.agentpanels import AgentBox, AgentProtoBox
+from AgentModPy.agentdat import AgentDat, FoodDat, FoodChoice, FoodGut
 
 
 class AgentMod(Mod):
